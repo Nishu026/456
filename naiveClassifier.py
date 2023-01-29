@@ -1,112 +1,37 @@
-import csv
-import random
-import math
+import pandas as pd
 
+msg = pd.read_csv('naivetext.csv',names=['message','label'])
+print('The dimensions of the dataset', msg.shape)
+msg['labelnum'] = msg.label.map({'pos': 1, 'neg': 0})
+X = msg.message
+y = msg.labelnum
+print(X)
+print(y)
 
-def loadcsv(filename):
-    lines = csv.reader(open(filename, "r"));
-    dataset = list(lines)
-    for i in range(len(dataset)):
-        dataset[i] = [float(x) for x in dataset[i]]
-    return dataset
+from sklearn.model_selection import train_test_split
 
+xtrain, xtest, ytrain, ytest = train_test_split(X, y)
+print('\n The total number of Training Data :', ytrain.shape)
+print('\n The total number of Test Data :', ytest.shape)
 
-def splitdataset(dataset, splitratio):
-    trainsize = int(len(dataset) * splitratio);
-    trainset = []
-    copy = list(dataset);
-    while len(trainset) < trainsize:
-        index = random.randrange(len(copy));
-        trainset.append(copy.pop(index))
-    return [trainset, copy]
+from sklearn.feature_extraction.text import CountVectorizer
 
+count_vect = CountVectorizer()
+xtrain_dtm = count_vect.fit_transform(xtrain)
+xtest_dtm = count_vect.transform(xtest)
+print('\n The words or Tokens in the text documents \n')
+print(count_vect.get_feature_names_out())
+df = pd.DataFrame(xtrain_dtm.toarray(), columns=count_vect.get_feature_names_out())
 
-def separatebyclass(dataset):
-    separated = {}  
-    for i in range(len(dataset)):
-        vector = dataset[i]
-        if (vector[-1] not in separated):
-            separated[vector[-1]] = []
-        separated[vector[-1]].append(vector)
-    return separated
+from sklearn.naive_bayes import MultinomialNB
 
+clf = MultinomialNB().fit(xtrain_dtm, ytrain)
+predicted = clf.predict(xtest_dtm)
 
-def mean(numbers):
-    return sum(numbers) / float(len(numbers))
+from sklearn import metrics
 
-
-def stdev(numbers):
-    avg = mean(numbers)
-    variance = sum([pow(x - avg, 2) for x in numbers]) / float(len(numbers) - 1)
-    return math.sqrt(variance)
-
-
-def summarize(dataset):  
-    summaries = [(mean(attribute), stdev(attribute)) for attribute in zip(*dataset)];
-    del summaries[-1]  
-    return summaries
-
-
-def summarizebyclass(dataset):
-    separated = separatebyclass(dataset);
-    summaries = {}
-    for classvalue, instances in separated.items():
-        summaries[classvalue] = summarize(instances)  
-    return summaries
-
-
-def calculateprobability(x, mean, stdev):
-    exponent = math.exp(-(math.pow(x - mean, 2) / (2 * math.pow(stdev, 2))))
-    return (1 / (math.sqrt(2 * math.pi) * stdev)) * exponent
-
-
-def calculateclassprobabilities(summaries, inputvector):
-    probabilities = {}  
-    for classvalue, classsummaries in summaries.items():  
-        probabilities[classvalue] = 1
-        for i in range(len(classsummaries)):
-            mean, stdev = classsummaries[i]  
-            x = inputvector[i]  
-            probabilities[classvalue] *= calculateprobability(x, mean, stdev); 
-    return probabilities
-
-
-def predict(summaries, inputvector):  
-    probabilities = calculateclassprobabilities(summaries, inputvector)
-    bestLabel, bestProb = None, -1
-    for classvalue, probability in probabilities.items():  
-        if bestLabel is None or probability > bestProb:
-            bestProb = probability
-            bestLabel = classvalue
-    return bestLabel
-
-
-def getpredictions(summaries, testset):
-    predictions = []
-    for i in range(len(testset)):
-        result = predict(summaries, testset[i])
-        predictions.append(result)
-    return predictions
-
-
-def getaccuracy(testset, predictions):
-    correct = 0
-    for i in range(len(testset)):
-        if testset[i][-1] == predictions[i]:
-            correct += 1
-    return (correct / float(len(testset))) * 100.0
-
-def main():
-    filename = 'naivedata.csv'
-    splitratio = 0.67
-    dataset = loadcsv(filename);
-    trainingset, testset = splitdataset(dataset, splitratio)
-    print('Split {0} rows into train={1} and test={2} rows'.format(len(dataset), len(trainingset), len(testset)))
-
-    summaries = summarizebyclass(trainingset);
-
-    predictions = getpredictions(summaries, testset)  
-    accuracy = getaccuracy(testset, predictions)
-    print('Accuracy of the classifier is : {0}%'.format(accuracy))
-
-main()
+print('\n Accuracy of the classifier is', metrics.accuracy_score(ytest, predicted))
+print('\n Confusion matrix')
+print(metrics.confusion_matrix(ytest, predicted))
+print('\n The value of Precision', metrics.precision_score(ytest, predicted))
+print('\n The value of Recall', metrics.recall_score(ytest, predicted))
